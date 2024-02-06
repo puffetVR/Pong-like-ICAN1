@@ -7,44 +7,53 @@ public class Racket : Base
     [Header("Flags")]
     public RacketTeam racketTeam;
     public ControllerState controllerState;
-
+    public int currentScore {  get; private set; }
     [Header("References")]
-    Rigidbody2D body;
+    public Rigidbody2D body;
+    public SpriteRenderer racketSprite;
+    public TrailRenderer racketTrail;
+    public Color racketColor { get; private set; }
 
     [Header("Inputs")]
-    private float moveAxis;
     private bool fire;
     private bool item;
     private bool flipper;
+    public float moveAxis { get; private set; }
 
     [Header("Vectors")]
     private Vector2 moveVector;
 
+    
     void Start()
     {
         InitAttributes();
-        PassReferences();
     }
 
     private void InitAttributes()
     {
         IsControllable = false;
-        body = GetComponent<Rigidbody2D>();
     }
 
-    private void PassReferences()
+    public void ColorSetter()
     {
-        switch (racketTeam)
+        Color color = Game.AIColor;
+
+        switch (controllerState)
         {
-            case RacketTeam.Player1:
-                Game.LeftRacket = this;
+            case ControllerState.Player:
+                color = racketTeam == RacketTeam.Player1 ? Game.Player1Color : Game.Player2Color;
                 break;
-            case RacketTeam.Player2:
-                Game.RightRacket = this;
-                break;
-            default:
+            case ControllerState.AI:
+                color = Game.AIColor;
                 break;
         }
+
+        color.a = 1;
+
+        racketColor = color;
+        racketSprite.color = color;
+        racketTrail.startColor = color;
+        racketTrail.endColor = color;
     }
 
     public void IsControllableSet(bool state)
@@ -78,6 +87,7 @@ public class Racket : Base
     {
         // Gives Racket control to Player over AI
         controllerState = fire ? ControllerState.Player : controllerState;
+        ColorSetter();
     }
 
     private void PlayerInput()
@@ -99,6 +109,42 @@ public class Racket : Base
     private void AIController()
     {
 
+    }
+
+    public void Score()
+    {
+        if (currentScore >= Game.scoreToWin)
+        {
+            Debug.Log("Player " + (int)racketTeam + " wins the round !");
+            Game.EndGame();
+        }
+        else currentScore++;
+    }
+
+    public void RacketReset()
+    {
+        body.velocity = Vector2.zero;
+        
+        float pos = Game.racketXPosFromOrigin;
+        switch (racketTeam)
+        {
+            case RacketTeam.Player1:
+                body.position = new Vector2(pos, 0f);
+                break;
+            case RacketTeam.Player2:
+                body.position = new Vector2(-pos, 0f);
+                break;
+            default:
+                break;
+        }
+
+        Game.ResetTrail(racketTrail);
+        SetScore(0);
+    }
+
+    public void SetScore(int score)
+    {
+        currentScore = score;
     }
 
 }
