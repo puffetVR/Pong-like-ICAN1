@@ -32,13 +32,16 @@ public class GameManager : MonoBehaviour
     private float cameraReturnSpeed = 2f;
 
     [Header("Players")]
-    public float racketSpeed = 2f;
+    public float racketSpeed = 15f;
+    public float maxRacketHeight = 3.5f;
     public float racketXPosFromOrigin = -7f;
-    public Racket[] Players { get; private set; } = new Racket[2];
+    public float racketYPosFromOrigin = -0.5f;
+    public Player[] Players { get; private set; } = new Player[2];
     public BoxCollider2D[] PlayerGoals = new BoxCollider2D[2];
     public Color Player1Color = Color.cyan;
     public Color Player2Color = Color.red;
     public Color AIColor = Color.gray;
+    public PlayerWall[] PlayerWalls { get; private set; } = new PlayerWall[2];
     public Color HiHealthColor;
     public Color MedHealthColor;
     public Color LoHealthColor;
@@ -55,6 +58,14 @@ public class GameManager : MonoBehaviour
 
     private void Start()
     {
+        InitAttributes();
+        StartCoroutine(InitGameDelayer());
+    }
+
+    IEnumerator InitGameDelayer()
+    {
+        yield return new WaitForSeconds(0.1f);
+
         InitGame();
     }
 
@@ -101,8 +112,7 @@ public class GameManager : MonoBehaviour
 
     public void InitGame()
     {
-        InitAttributes();
-        InitRackets();
+        InitPlayers();
         InitBall();
 
         StartGame();
@@ -112,20 +122,20 @@ public class GameManager : MonoBehaviour
     {
         PlayZone = GetComponentInChildren<BoxCollider2D>();
         MainCamera = Camera.main;
+
+        PlayerWalls = FindObjectsOfType<PlayerWall>();
     }
 
-    void InitRackets()
+    void InitPlayers()
     {
-        Racket[] rackets = FindObjectsOfType<Racket>();
+        Player[] players = FindObjectsOfType<Player>();
 
-        for (int i = 0; i < rackets.Length; i++)
+        for (int i = 0; i < players.Length; i++)
         {
-            if (rackets[i])
+            if (players[i])
             {
-                if (rackets[i].racketTeam == RacketTeam.Player1) Players[0] = rackets[i];
-                else if (rackets[i].racketTeam == RacketTeam.Player2) Players[1] = rackets[i];
-
-                rackets[i].ColorSetter();
+                if (players[i].playerTeam == PlayerTeam.Player1) Players[0] = players[i];
+                else if (players[i].playerTeam == PlayerTeam.Player2) Players[1] = players[i];
             }
         }
     }
@@ -155,8 +165,13 @@ public class GameManager : MonoBehaviour
         if (!Players[1].IsInit || !Players[0].IsInit || !Ball.IsInit) return;
        
         Ball.BallReset(Ball.RandomizeOwner());
-        Players[0].RacketReset();
-        Players[1].RacketReset();
+        InitRound();
+    }
+
+    public void InitRound()
+    {
+        Players[0].ResetPlayer();
+        Players[1].ResetPlayer();
     }
 
     public void EndGame()
@@ -170,6 +185,18 @@ public class GameManager : MonoBehaviour
         yield return new WaitForSeconds(timeBeforeGameStart);
 
         StartGame();
+    }
+    public IEnumerator RoundEnd(Player winner)
+    {
+        yield return new WaitForSeconds(timeBeforeBallMove);
+
+        Player otherPlayer;
+
+        if (winner != null) otherPlayer = winner == Players[0] ? Players[1] : Players[0];
+        else otherPlayer = Ball.RandomizeOwner().player;
+
+        Ball.BallReset(otherPlayer.racket);
+        InitRound();
     }
 }
 

@@ -1,29 +1,32 @@
+using System.Collections;
 using UnityEngine;
 
 public class Racket : Base
 {
+    public bool isPlayerControlled = false;
+    public Player player { get; private set; }
     public bool IsControllable { get; private set; }
 
     [Header("Flags")]
-    public RacketTeam racketTeam;
-    public ControllerState controllerState;
-    public int currentScore {  get; private set; }
+    private bool isSmashAlt = false;
+    private bool canSmash = true;
     [Header("References")]
     public Rigidbody2D body;
+    public Transform pivot;
     public SpriteRenderer racketSprite;
     public TrailRenderer racketTrail;
+    public BoxCollider2D racketCollider;
+    public Transform racketCenter;
+    private float targetAngle = -15f;
+    private float currentAngle = -15f;
+    private float targetOffset;
+    private float currentOffset;
+    private float colliderYOffset;
     public Color racketColor { get; private set; }
-
-    [Header("Inputs")]
-    private bool fire;
-    private bool item;
-    private bool flipper;
-    public float moveAxis { get; private set; }
 
     [Header("Vectors")]
     private Vector2 moveVector;
 
-    
     void Start()
     {
         InitAttributes();
@@ -32,16 +35,22 @@ public class Racket : Base
     private void InitAttributes()
     {
         IsControllable = false;
+        colliderYOffset = racketCollider.offset.y;
+    }
+
+    public void SetPlayerOwner(Player owner)
+    {
+        player = owner;
     }
 
     public void ColorSetter()
     {
         Color color = Game.AIColor;
 
-        switch (controllerState)
+        switch (player.controllerState)
         {
             case ControllerState.Player:
-                color = racketTeam == RacketTeam.Player1 ? Game.Player1Color : Game.Player2Color;
+                color = player.playerTeam == PlayerTeam.Player1 ? Game.Player1Color : Game.Player2Color;
                 break;
             case ControllerState.AI:
                 color = Game.AIColor;
@@ -65,89 +74,77 @@ public class Racket : Base
     {
         if (IsInit == false) return;
 
-        PlayerInput();
+        body.position = new Vector2(body.position.x, Mathf.Clamp(body.position.y, -Game.maxRacketHeight, Game.maxRacketHeight));
 
-        switch (controllerState)
-        {
-            case ControllerState.None:
-                controllerState = ControllerState.AI;
-                break;
-            case ControllerState.Player:
-                PlayerMovement();
-                break;
-            case ControllerState.AI:
-                WaitForPlayerInput();
-                AIController();
-                break;
-        }
+        if (player.fire && canSmash) RacketSmash();
+        RacketSmashUpdate();
+
+        if (isPlayerControlled) RacketMovement();
 
     }
 
-    private void WaitForPlayerInput()
+    private void RacketSmash()
     {
-        // Gives Racket control to Player over AI
-        controllerState = fire ? ControllerState.Player : controllerState;
-        ColorSetter();
+        Debug.Log("Poc");
+        isSmashAlt = !isSmashAlt;
+        targetAngle = isSmashAlt ? -165f : -15f;
+        targetOffset = isSmashAlt ? -colliderYOffset : colliderYOffset;
+        racketCollider.enabled = true;
+        if (gameObject.activeSelf) StartCoroutine(SmashDelay());
+    }
+    
+    IEnumerator SmashDelay()
+    {
+        canSmash = false;
+
+        yield return new WaitForSeconds(.25f);
+
+        canSmash = true;
+        racketCollider.enabled = false;
     }
 
-    private void PlayerInput()
+    private void RacketSmashUpdate()
     {
-        moveAxis = Input.GetAxis(Game.Vertical + (int)racketTeam);
-        fire = Input.GetButtonDown(Game.Fire + (int)racketTeam);
-        if (fire) Debug.Log("Player " + (int)racketTeam + " fired.");
-        item = Input.GetButtonDown(Game.Item + (int)racketTeam);
-        if (item) Debug.Log("Player " + (int)racketTeam + " used their item.");
-        flipper = Input.GetButtonDown(Game.Flipper + (int)racketTeam);
-        if (flipper) Debug.Log("Player " + (int)racketTeam + " used their flipper.");
+        currentAngle = Mathf.MoveTowards(currentAngle, targetAngle, Game.racketSpeed / 3);
+        Quaternion angle = Quaternion.Euler(new Vector3(0f, 0f, currentAngle));
+        pivot.localRotation = angle;
+
+        currentOffset = Mathf.MoveTowards(currentOffset, targetOffset, Game.racketSpeed / 300);
+        racketCollider.offset = new Vector2(racketCollider.offset.x, currentOffset);
     }
 
-    private void PlayerMovement()
+    private void RacketMovement()
     {
-        body.velocity = new Vector2(0f, moveAxis * Game.racketSpeed);
-    }
+        float moveAmount = player.moveAxis;
+        if (body.position.y >= Game.maxRacketHeight) moveAmount = Mathf.Clamp(moveAmount, -1f, 0f);
+        if (body.position.y <= -Game.maxRacketHeight) moveAmount = Mathf.Clamp(moveAmount, 0f, 1f);
 
-    private void AIController()
-    {
+        body.velocity = new Vector2(0f, moveAmount * Game.racketSpeed);
 
-    }
-
-    public void Score()
-    {
-        if (currentScore >= Game.scoreToWin)
-        {
-            Debug.Log("Player " + (int)racketTeam + " wins the round !");
-            Game.EndGame();
-        }
-        else currentScore++;
+        if (body.position.y > Game.maxRacketHeight
+            || body.position.y < -Game.maxRacketHeight) body.velocity = Vector2.zero;
     }
 
     public void RacketReset()
     {
         body.velocity = Vector2.zero;
+        racketCollider.enabled = false;
         
-        float pos = Game.racketXPosFromOrigin;
-        switch (racketTeam)
+        float posX = Game.racketXPosFromOrigin;
+        float posY = Game.racketYPosFromOrigin;
+        switch (player.playerTeam)
         {
-            case RacketTeam.Player1:
-                body.position = new Vector2(pos, 0f);
+            case PlayerTeam.Player1:
+                body.position = new Vector2(posX, posY);
                 break;
-            case RacketTeam.Player2:
-                body.position = new Vector2(-pos, 0f);
+            case PlayerTeam.Player2:
+                body.position = new Vector2(-posX, posY);
                 break;
             default:
                 break;
         }
 
         Game.ResetTrail(racketTrail);
-        SetScore(0);
-    }
-
-    public void SetScore(int score)
-    {
-        currentScore = score;
     }
 
 }
-
-public enum RacketTeam { None, Player1, Player2 };
-public enum ControllerState { None, Player, AI }
