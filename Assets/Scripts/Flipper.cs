@@ -35,19 +35,21 @@ public class Flipper : Base
     {
         player = owner;
     }
-    public void ColorSetter()
+    public void ColorSetter(Color color)
     {
-        Color color = Game.AIColor;
+        if (player.controllerState == ControllerState.AI) color = Game.AIColor;
 
-        switch (player.controllerState)
-        {
-            case ControllerState.Player:
-                color = player.playerTeam == PlayerTeam.Player1 ? Game.Player1Color : Game.Player2Color;
-                break;
-            case ControllerState.AI:
-                color = Game.AIColor;
-                break;
-        }
+        //Color color = Game.AIColor;
+
+        //switch (player.controllerState)
+        //{
+        //    case ControllerState.Player:
+        //        color = player.playerTeam == PlayerTeam.Player1 ? Game.Player1Color : Game.Player2Color;
+        //        break;
+        //    case ControllerState.AI:
+        //        color = Game.AIColor;
+        //        break;
+        //}
 
         color.a = 1;
 

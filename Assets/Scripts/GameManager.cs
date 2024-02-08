@@ -24,6 +24,11 @@ public class GameManager : MonoBehaviour
 
     public BoxCollider2D PlayZone { get; private set; }
 
+    public Color blackColor { get; private set; } = new Color(0, 0, 0, 1);
+    public Color redColor { get; private set; } = new Color(1, 0.5f, 0.5f, 1);
+    public Color blueColor { get; private set; } = new Color(0.5f, 1, 1, 1);
+
+
     [Header("Camera")]
     private Camera MainCamera;
     private Vector3 BasePosition = new Vector3(0f,0f,-10f);
@@ -38,13 +43,14 @@ public class GameManager : MonoBehaviour
     public float racketYPosFromOrigin = -0.5f;
     public Player[] Players { get; private set; } = new Player[2];
     public BoxCollider2D[] PlayerGoals = new BoxCollider2D[2];
-    public Color Player1Color = Color.cyan;
-    public Color Player2Color = Color.red;
+    //public Color Player1Color = Color.cyan;
+    //public Color Player2Color = Color.red;
     public Color AIColor = Color.gray;
     public PlayerWall[] PlayerWalls { get; private set; } = new PlayerWall[2];
     public Color HiHealthColor;
     public Color MedHealthColor;
     public Color LoHealthColor;
+
     [Header("Ball")]
     public Pongball Ball;
     public float timeBeforeBallMove = 1f;
@@ -55,6 +61,9 @@ public class GameManager : MonoBehaviour
     [Header("Score")]
     public int scoreToWin = 3;
     public float timeBeforeGameStart = 3;
+
+    [Header("Level")]
+    private BumperMove MiddleBumper;
 
     private void Start()
     {
@@ -124,6 +133,7 @@ public class GameManager : MonoBehaviour
         MainCamera = Camera.main;
 
         PlayerWalls = FindObjectsOfType<PlayerWall>();
+        MiddleBumper = FindAnyObjectByType<BumperMove>();
     }
 
     void InitPlayers()
@@ -166,12 +176,15 @@ public class GameManager : MonoBehaviour
        
         Ball.BallReset(Ball.RandomizeOwner());
         InitRound();
+        Players[0].SetScore(0);
+        Players[1].SetScore(0);
     }
 
     public void InitRound()
     {
         Players[0].ResetPlayer();
         Players[1].ResetPlayer();
+        MiddleBumper.ResetBumper();
     }
 
     public void EndGame()

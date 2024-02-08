@@ -7,13 +7,17 @@ using UnityEngine.EventSystems;
 public class Pongball : Base
 {
     [Header("Flags")]
-    private bool IsMoving = false;
     private bool LastHitBumper = false;
+    public bool IsMoving { get; private set; } = false;
 
     [Header("References")]
     public Rigidbody2D body;
     public TrailRenderer ballTrail;
     public SpriteRenderer ballSprite;
+    public Animator ballAnimator;
+    public ParticleSystem ballCollisionParticles;
+    public ParticleSystem ballExplosionParticles;
+    public ParticleSystem ballWinParticles;
 
     public float currentBallSpeed { get; private set; }
     private float speedBeforeBumper;
@@ -58,6 +62,8 @@ public class Pongball : Base
         ballSprite.color = owner.racketColor;
         ballTrail.startColor = owner.racketColor;
         ballTrail.endColor = owner.racketColor;
+        var main = ballCollisionParticles.main;
+        main.startColor = owner.racketColor;
     }
 
     public void IsBallMoving(bool state)
@@ -70,33 +76,44 @@ public class Pongball : Base
         if (!IsInit) return;
 
         BallMover();
+        AnimatorUpdater();
     }
 
-    public void SetMoveDirection()
+    public Vector2 SetMoveDirection(float hitterXPos)
     {
-        if (currentOwner == null) return;
+        if (currentOwner == null) return Vector2.zero;
 
-        moveDirection = currentOwner == Game.Players[0] ? Vector2.right : Vector2.left;
+        //Vector2 dir = currentOwner == Game.Players[0] ? Vector2.right : Vector2.left;
+        Vector2 dir = hitterXPos < 0 ? Vector2.right : Vector2.left;
+
+        return dir;
     }
 
     public void BallMover()
     {
+        currentBallSpeed = LastHitBumper ?
+                        currentBallSpeed = Mathf.Clamp(currentBallSpeed, Game.baseBallSpeed, Game.maxBallSpeed * 2) :
+                        currentBallSpeed = Mathf.Clamp(currentBallSpeed, Game.baseBallSpeed, Game.maxBallSpeed);
+
         if (IsMoving == false) return;
 
         //Debug.Log("Pushing ball");
         ballVelocity = moveDirection * currentBallSpeed;
         body.velocity = ballVelocity;
+
+
+    }
+
+    private void AnimatorUpdater()
+    {
+        ballAnimator.SetFloat("currentBallSpeed", currentBallSpeed);
     }
 
     public void SetBallSpeed(float speed)
     {
         currentBallSpeed = speed;
 
-        speedBeforeBumper = LastHitBumper ? speedBeforeBumper : Game.baseBallSpeed;
-
-        currentBallSpeed = LastHitBumper ?
-            currentBallSpeed = Mathf.Clamp(currentBallSpeed, Game.baseBallSpeed, Game.maxBallSpeed * 2) :
-            currentBallSpeed = Mathf.Clamp(currentBallSpeed, Game.baseBallSpeed, Game.maxBallSpeed);
+        //speedBeforeBumper = LastHitBumper ? speedBeforeBumper : Game.baseBallSpeed + speedBeforeBumper / 4;
     }
 
     private void OnCollisionEnter2D(Collision2D collision)
@@ -109,20 +126,15 @@ public class Pongball : Base
         Vector2 moveDirectionB;
         moveDirectionB = Vector2.zero;
 
-        if (!collision.gameObject.CompareTag("Bumper")) SetBallSpeed(speedBeforeBumper);
-
-        //if (collision.gameObject.CompareTag("Racket"))
-        //{
-        //    currentOwner = collision.gameObject.GetComponentInParent<Racket>();
-        //    collision.gameObject.GetComponent<BoxCollider2D>().enabled = false;
-        //    if (currentBallSpeed < Game.maxBallSpeed) SetBallSpeed(currentBallSpeed * 1.2f);
-        //    moveDirectionB = new Vector2(0f, currentOwner.moveAxis / Game.reflectDampening);
-        //}
+        if (!collision.gameObject.CompareTag("Bumper") && LastHitBumper) SetBallSpeed(speedBeforeBumper * 0.75f);
 
         if (collision.gameObject.CompareTag("Bumper"))
         {
             LastHitBumper = true;
-            SetBallSpeed(currentBallSpeed * 1.5f);
+            Animator anim = collision.gameObject.GetComponent<Animator>();
+            if (anim) anim.SetTrigger("Hit");
+            speedBeforeBumper = currentBallSpeed * 1.5f;
+            SetBallSpeed(speedBeforeBumper);
             Game.ShakeCamera(currentBallSpeed / 10, .1f);
         }
         else
@@ -139,6 +151,9 @@ public class Pongball : Base
 
         moveDirection = moveDirectionA + moveDirectionB;
 
+        ballAnimator.SetTrigger("Hit");
+        ballCollisionParticles.Play();
+
     }
 
     private void OnTriggerEnter2D(Collider2D trigger)
@@ -148,23 +163,25 @@ public class Pongball : Base
         if (trigger.gameObject.CompareTag("Racket"))
         {
             Racket hitRacket = trigger.gameObject.GetComponent<Racket>();
-            //Debug.Log("RACKET HIT");
+            Debug.Log(hitRacket.gameObject.name + " hit");
             currentOwner = hitRacket;
-            hitRacket.racketCollider.enabled = false;
             if (currentBallSpeed < Game.maxBallSpeed) SetBallSpeed(currentBallSpeed * 1.2f);
 
             Vector2 moveDirectionA;
-            moveDirectionA = -moveDirection;
-            //Vector2 point = trigger.ClosestPoint(transform.position);
-            //moveDirectionA = Vector2.Reflect(moveDirection, point);
+            moveDirectionA = SetMoveDirection(hitRacket.body.position.x);
 
             Vector2 moveDirectionB;
             moveDirectionB = new Vector2(0f, currentOwner.player.moveAxis / Game.reflectDampening);
 
             moveDirection = moveDirectionA + moveDirectionB;
 
+            ballAnimator.SetTrigger("Hit");
+            ballCollisionParticles.Play();
+
+            hitRacket.racketAnimator.SetTrigger("Hit");
             Game.ShakeCamera(currentBallSpeed / 10, .1f);
             IsBallMoving(true);
+            hitRacket.racketCollider.enabled = false;
         }
 
         if (!trigger.gameObject.CompareTag("PlayerGoal")) return;
@@ -190,7 +207,8 @@ public class Pongball : Base
         IsBallMoving(false);
 
         Game.ResetTrail(ballTrail);
-        ballSprite.enabled = true;
+        //ballSprite.enabled = true;
+        ballAnimator.SetTrigger("Reset");
 
         float xPosition = owner.body.position.x < 0 ? -owner.body.position.x - 1f : -owner.body.position.x + 1f;
         body.position = new Vector2(xPosition, 0f);
@@ -200,7 +218,7 @@ public class Pongball : Base
         LastHitBumper = false;
 
         SetBallSpeed(Game.baseBallSpeed);
-        SetMoveDirection();
+        moveDirection = SetMoveDirection(owner.body.position.x);
         //StartCoroutine(StartBallMovement());
     }
 
@@ -214,7 +232,6 @@ public class Pongball : Base
     public void StopBall()
     {
         IsBallMoving(false);
-        ballSprite.enabled = false;
         body.velocity = Vector2.zero;
     }
 
@@ -224,6 +241,8 @@ public class Pongball : Base
         Debug.Log("Goal!");
         Game.ShakeCamera(1f, .2f);
 
+        ballAnimator.SetTrigger("Explode");
+        ballWinParticles.Play();
     }
 
     public void BallExplode()
@@ -231,6 +250,10 @@ public class Pongball : Base
         StopBall();
         Debug.Log("Boom");
         Game.ShakeCamera(1f, .2f);
+
+        ballAnimator.SetTrigger("Explode");
+        ballExplosionParticles.Play();
+
     }
 
 }

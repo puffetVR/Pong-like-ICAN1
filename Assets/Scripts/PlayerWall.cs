@@ -9,6 +9,7 @@ public class PlayerWall : Base
     private int wallHealth = 3;
     public SpriteRenderer wallSprite;
     public BoxCollider2D wallCollider;
+    public Animator wallAnimator;
 
     public void SetPlayerOwner(Player owner)
     {
@@ -51,6 +52,7 @@ public class PlayerWall : Base
     public void DamageWall()
     {
         wallHealth--;
+        wallAnimator.SetTrigger("Hit");
 
         WallHealthHandling();
     }

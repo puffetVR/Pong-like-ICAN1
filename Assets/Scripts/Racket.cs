@@ -17,11 +17,15 @@ public class Racket : Base
     public TrailRenderer racketTrail;
     public BoxCollider2D racketCollider;
     public Transform racketCenter;
-    private float targetAngle = -15f;
-    private float currentAngle = -15f;
+    public Animator racketAnimator;
+    private float targetAngle;
+    private float currentAngle;
+    private float upAngle = -15f;
+    private float downAngle = -165f;
     private float targetOffset;
     private float currentOffset;
     private float colliderYOffset;
+    private float colliderXOffset;
     public Color racketColor { get; private set; }
 
     [Header("Vectors")]
@@ -36,6 +40,14 @@ public class Racket : Base
     {
         IsControllable = false;
         colliderYOffset = racketCollider.offset.y;
+
+        bool IsPlayer1 = player.playerTeam == PlayerTeam.Player1 ? true : false;
+
+        colliderXOffset = IsPlayer1 ? racketCollider.offset.x : -racketCollider.offset.x;
+        upAngle = IsPlayer1 ? upAngle : -upAngle;
+        downAngle = IsPlayer1 ? downAngle : -downAngle;
+        currentAngle = upAngle;
+        targetAngle = currentAngle;
     }
 
     public void SetPlayerOwner(Player owner)
@@ -43,19 +55,21 @@ public class Racket : Base
         player = owner;
     }
 
-    public void ColorSetter()
+    public void ColorSetter(Color color)
     {
-        Color color = Game.AIColor;
+        //Color color = Game.AIColor;
 
-        switch (player.controllerState)
-        {
-            case ControllerState.Player:
-                color = player.playerTeam == PlayerTeam.Player1 ? Game.Player1Color : Game.Player2Color;
-                break;
-            case ControllerState.AI:
-                color = Game.AIColor;
-                break;
-        }
+        if (player.controllerState == ControllerState.AI) color = Game.AIColor;
+
+        //switch (player.controllerState)
+        //{
+        //    case ControllerState.Player:
+        //        color = player.playerColor;
+        //        break;
+        //    case ControllerState.AI:
+        //        color = Game.AIColor;
+        //        break;
+        //}
 
         color.a = 1;
 
@@ -87,7 +101,7 @@ public class Racket : Base
     {
         Debug.Log("Poc");
         isSmashAlt = !isSmashAlt;
-        targetAngle = isSmashAlt ? -165f : -15f;
+        targetAngle = isSmashAlt ? downAngle : upAngle;
         targetOffset = isSmashAlt ? -colliderYOffset : colliderYOffset;
         racketCollider.enabled = true;
         if (gameObject.activeSelf) StartCoroutine(SmashDelay());
@@ -97,7 +111,7 @@ public class Racket : Base
     {
         canSmash = false;
 
-        yield return new WaitForSeconds(.25f);
+        yield return new WaitForSeconds(1.75f / Game.Ball.currentBallSpeed);
 
         canSmash = true;
         racketCollider.enabled = false;
@@ -110,7 +124,7 @@ public class Racket : Base
         pivot.localRotation = angle;
 
         currentOffset = Mathf.MoveTowards(currentOffset, targetOffset, Game.racketSpeed / 300);
-        racketCollider.offset = new Vector2(racketCollider.offset.x, currentOffset);
+        racketCollider.offset = new Vector2(colliderXOffset, currentOffset);
     }
 
     private void RacketMovement()

@@ -1,6 +1,8 @@
 using System.Collections;
 using System.Collections.Generic;
+using Unity.VisualScripting;
 using UnityEngine;
+using UnityEngine.UI;
 
 public class Player : Base
 {
@@ -19,6 +21,8 @@ public class Player : Base
     public Flipper flipper1;
     public Flipper flipper2;
     public PlayerWall wall;
+    public Image[] scoreSprites;
+    public Color playerColor;
 
     private void Start()
     {
@@ -32,9 +36,23 @@ public class Player : Base
         flipper2.SetPlayerOwner(this);
         wall.SetPlayerOwner(this);
 
-        racket.ColorSetter();
-        flipper1.ColorSetter();
-        flipper2.ColorSetter();
+        playerColor.a = 1;
+        if (playerColor == Game.blackColor) playerColor = playerTeam == PlayerTeam.Player1 ? Game.blueColor : Game.redColor;
+
+        racket.ColorSetter(playerColor);
+        flipper1.ColorSetter(playerColor);
+        flipper2.ColorSetter(playerColor);
+
+        ScoreResetter();
+    }
+
+    private void ScoreResetter()
+    {
+        for (int i = 0; i < scoreSprites.Length; i++)
+        {
+            scoreSprites[i].color = playerColor;
+            scoreSprites[i].enabled = false;
+        }
     }
 
     private void Update()
@@ -46,16 +64,26 @@ public class Player : Base
     public void SetScore(int score)
     {
         currentScore = score;
+
+        if (currentScore > 0)
+        {
+            if (scoreSprites[currentScore - 1] != null) scoreSprites[currentScore - 1].enabled = true;
+        }
+
+        if (currentScore == 0) ScoreResetter();
+
     }
 
     public void Score()
     {
+        SetScore(currentScore + 1);
+
         if (currentScore >= Game.scoreToWin)
         {
             Debug.Log("Player " + (int)playerTeam + " wins the round !");
             Game.EndGame();
         }
-        else currentScore++;
+
     }
 
     private void PlayerInput()
@@ -97,16 +125,16 @@ public class Player : Base
         racket.RacketReset();
         wall.WallReset();
         //flipper reset
-        SetScore(0);
     }
 
     private void WaitForPlayerInput()
     {
         // Gives Racket control to Player over AI
-        controllerState = fire ? ControllerState.Player : controllerState;
-        racket.ColorSetter();
-        flipper1.ColorSetter();
-        flipper2.ColorSetter();
+        if (fire || moveAxis != 0 || flipper) controllerState = ControllerState.Player;
+
+        racket.ColorSetter(playerColor);
+        flipper1.ColorSetter(playerColor);
+        flipper2.ColorSetter(playerColor);
     }
 
 }
