@@ -6,7 +6,7 @@ public class PlayerWall : Base
 {
     public Player player { get; private set; }
 
-    private int wallHealth = 3;
+    public int wallHealth = 3;
     public SpriteRenderer wallSprite;
     public BoxCollider2D wallCollider;
     public Animator wallAnimator;
@@ -45,6 +45,7 @@ public class PlayerWall : Base
                 wallSprite.color = Game.HiHealthColor;
                 break;
             default:
+                wallSprite.color = new Color(1, .5f, 1, 1) ;
                 break;
         }
     }

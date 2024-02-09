@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
@@ -13,7 +14,7 @@ public class Pongball : Base
     [Header("References")]
     public Rigidbody2D body;
     public TrailRenderer ballTrail;
-    public SpriteRenderer ballSprite;
+    public SpriteRenderer[] ballSprites;
     public Animator ballAnimator;
     public ParticleSystem ballCollisionParticles;
     public ParticleSystem ballExplosionParticles;
@@ -34,9 +35,12 @@ public class Pongball : Base
     }
     private Racket _currentOwner;
 
-    [Header("Vectors")]
+    [Header("Physics")]
     Vector2 moveDirection;
     Vector2 ballVelocity;
+    Vector2 lastPos;
+    Vector2 newPos;
+    float timeSinceStuck;
 
     void Start()
     {
@@ -47,21 +51,30 @@ public class Pongball : Base
     {
         body = GetComponent<Rigidbody2D>();
         ballTrail = GetComponentInChildren<TrailRenderer>();
-        ballSprite = GetComponentInChildren<SpriteRenderer>();
     }
 
     public Racket RandomizeOwner()
     {
         int rand = Random.Range(1, 3);
+        Racket randOwner = rand == 1 ? Game.Players[0].racket : Game.Players[1].racket;
 
-        return currentOwner = rand == 1 ? Game.Players[0].racket : Game.Players[1].racket;
+        SetBallOwner(randOwner);
+
+        return randOwner;
     }
 
     public void ColorSetter(Racket owner)
     {
-        ballSprite.color = owner.racketColor;
+        Color colorTransparent = owner.racketColor;
+        colorTransparent.a = 0;
+
+        for (int i = 0; i < ballSprites.Length; i++)
+        {
+            ballSprites[i].color = owner.racketColor;
+        }
+
         ballTrail.startColor = owner.racketColor;
-        ballTrail.endColor = owner.racketColor;
+        ballTrail.endColor = colorTransparent;
         var main = ballCollisionParticles.main;
         main.startColor = owner.racketColor;
     }
@@ -95,11 +108,41 @@ public class Pongball : Base
                         currentBallSpeed = Mathf.Clamp(currentBallSpeed, Game.baseBallSpeed, Game.maxBallSpeed * 2) :
                         currentBallSpeed = Mathf.Clamp(currentBallSpeed, Game.baseBallSpeed, Game.maxBallSpeed);
 
-        if (IsMoving == false) return;
+        if (IsMoving == false || Game.RoundState == RoundState.Wait) return;
 
-        //Debug.Log("Pushing ball");
         ballVelocity = moveDirection * currentBallSpeed;
         body.velocity = ballVelocity;
+
+
+        StuckDetect();
+
+    }
+
+    void StuckDetect()
+    {
+        newPos = body.position;
+
+        if (lastPos == newPos)
+        {
+            Debug.Log("Ball seems stuck");
+
+            timeSinceStuck += Game.deltaTime;
+
+            if (timeSinceStuck > .02f)
+            {
+                Debug.LogWarning("DOOR STUCK!");
+                // how fix plz help
+            }
+
+        }
+
+        else if (lastPos != newPos)
+        {
+            Debug.Log("Ball is currently moving");
+            timeSinceStuck = 0f;
+        }
+
+        lastPos = newPos;
 
 
     }
@@ -112,19 +155,11 @@ public class Pongball : Base
     public void SetBallSpeed(float speed)
     {
         currentBallSpeed = speed;
-
-        //speedBeforeBumper = LastHitBumper ? speedBeforeBumper : Game.baseBallSpeed + speedBeforeBumper / 4;
     }
 
     private void OnCollisionEnter2D(Collision2D collision)
     {
-        ContactPoint2D[] contacts = collision.contacts;
-
-        Vector2 moveDirectionA;
-        moveDirectionA = Vector2.Reflect(moveDirection, contacts[0].normal);
-
-        Vector2 moveDirectionB;
-        moveDirectionB = Vector2.zero;
+        if (collision == null) return;
 
         if (!collision.gameObject.CompareTag("Bumper") && LastHitBumper) SetBallSpeed(speedBeforeBumper * 0.75f);
 
@@ -145,14 +180,25 @@ public class Pongball : Base
 
         if (collision.gameObject.CompareTag("PlayerWall"))
         {
+            PlayerWall hitWall = collision.gameObject.GetComponent<PlayerWall>();
+
             Game.ShakeCamera(currentBallSpeed / 6, .2f);
-            collision.gameObject.GetComponent<PlayerWall>().DamageWall();
+            hitWall.DamageWall();
+
+            if (Game.gameMode == GameMode.Versus)
+            {
+                Racket ownerSwap = hitWall.player == Game.Players[0] ? Game.Players[0].racket : Game.Players[1].racket;
+                SetBallOwner(ownerSwap);
+            }
+           
         }
 
-        moveDirection = moveDirectionA + moveDirectionB;
+        ContactPoint2D[] contacts = collision.contacts;
+        moveDirection = Vector2.Reflect(moveDirection, contacts[0].normal);
 
         ballAnimator.SetTrigger("Hit");
         ballCollisionParticles.Play();
+        RandomizeBallRotation();
 
     }
 
@@ -164,14 +210,14 @@ public class Pongball : Base
         {
             Racket hitRacket = trigger.gameObject.GetComponent<Racket>();
             Debug.Log(hitRacket.gameObject.name + " hit");
-            currentOwner = hitRacket;
+            SetBallOwner(hitRacket);
             if (currentBallSpeed < Game.maxBallSpeed) SetBallSpeed(currentBallSpeed * 1.2f);
 
             Vector2 moveDirectionA;
             moveDirectionA = SetMoveDirection(hitRacket.body.position.x);
 
             Vector2 moveDirectionB;
-            moveDirectionB = new Vector2(0f, currentOwner.player.moveAxis / Game.reflectDampening);
+            moveDirectionB = new Vector2(0f, currentOwner.player.moveAmount / Game.reflectDampening);
 
             moveDirection = moveDirectionA + moveDirectionB;
 
@@ -179,27 +225,45 @@ public class Pongball : Base
             ballCollisionParticles.Play();
 
             hitRacket.racketAnimator.SetTrigger("Hit");
+            RandomizeBallRotation();
             Game.ShakeCamera(currentBallSpeed / 10, .1f);
             IsBallMoving(true);
             hitRacket.racketCollider.enabled = false;
         }
 
-        if (!trigger.gameObject.CompareTag("PlayerGoal")) return;
+        if (trigger.gameObject.CompareTag("PlayerGoal"))
+        {
+            int scorer = trigger == Game.PlayerGoals[0] ? 1 : 0;
 
-        int scorer = trigger == Game.PlayerGoals[0] ? 1 : 0;
+            BallInGoal();
+            Game.Players[scorer].Score((int)trigger.transform.localScale.z);
+            if (Game.Players[scorer].currentScore < 3 && gameObject.activeSelf) StartCoroutine(Game.RoundEnd(Game.Players[scorer]));
 
-        BallInGoal();
-        Game.Players[scorer].Score();
-        if (gameObject.activeSelf) StartCoroutine(Game.RoundEnd(Game.Players[scorer]));
+        }
+
+        if (trigger.gameObject.CompareTag("WinTrigger"))
+        {
+            BallInGoal();
+            Debug.Log("Player " + (int)currentOwner.player.playerTeam + " wins the game !");
+            Game.EndGame();
+        }
+
     }
 
     private void OnTriggerExit2D(Collider2D trigger)
     {
-        if (trigger != Game.PlayZone) return;
+        if (trigger == null || trigger != Game.PlayZone) return;
      
         BallExplode();
-        if (gameObject.activeSelf) StartCoroutine(Game.RoundEnd(null));
+        if (gameObject.activeSelf) StartCoroutine(Game.RoundEnd(currentOwner.player));
 
+    }
+
+    void RandomizeBallRotation()
+    {
+        float angle = Random.Range(0, 360);
+
+        body.SetRotation(angle);
     }
 
     public void BallReset(Racket owner)
@@ -207,26 +271,22 @@ public class Pongball : Base
         IsBallMoving(false);
 
         Game.ResetTrail(ballTrail);
-        //ballSprite.enabled = true;
         ballAnimator.SetTrigger("Reset");
 
-        float xPosition = owner.body.position.x < 0 ? -owner.body.position.x - 1f : -owner.body.position.x + 1f;
+        float xPosition = owner.body.position.x < 0 ? owner.body.position.x + 1f : owner.body.position.x - 1f;
         body.position = new Vector2(xPosition, 0f);
-        currentOwner = owner;
+        SetBallOwner(owner);
         ColorSetter(owner);
 
         LastHitBumper = false;
 
         SetBallSpeed(Game.baseBallSpeed);
         moveDirection = SetMoveDirection(owner.body.position.x);
-        //StartCoroutine(StartBallMovement());
     }
 
-    IEnumerator StartBallMovement()
+    public void SetBallOwner(Racket pass)
     {
-        yield return new WaitForSeconds(Game.timeBeforeBallMove);
-
-        IsBallMoving(true);
+        currentOwner = pass;
     }
 
     public void StopBall()

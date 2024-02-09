@@ -11,6 +11,7 @@ TagManager:
   - Bumper
   - PlayZone
   - PlayerGoal
+  - WinTrigger
   layers:
   - Default
   - TransparentFX

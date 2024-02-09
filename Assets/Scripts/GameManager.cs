@@ -1,33 +1,51 @@
 using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
+using TMPro;
+using UnityEngine.SceneManagement;
 
 public class GameManager : MonoBehaviour
 {
     public static GameManager Instance;
+    Fader FaderScript;
 
     private void Awake()
     {
         if (Instance != null) Destroy(gameObject);
 
         Instance = this;
+
+        FaderScript = gameObject.AddComponent<Fader>();
     }
 
     public float deltaTime { get; private set; }
     public float fixedDeltaTime { get; private set; }
+
+    public RoundState RoundState { get; private set; }
+    public GameState GameState { get; private set; }
 
     [Header("Input Manager")]
     public string Vertical = "Vertical";
     public string Fire = "Fire";
     public string Item = "Item";
     public string Flipper = "Flipper";
+    public string Pause = "Cancel";
 
-    public BoxCollider2D PlayZone { get; private set; }
+    [Header("UI")]
+    public Image fader;
+    public GameObject pauseMenu;
+    public TMP_Text text;
+    public string RoundText { get; private set; } = "Round ";
+    public string RoundDrawText { get; private set; } = "DRAW!";
+    public string PlayerPrefixText { get; private set; } = "Player ";
+    public string RoundEndText { get; private set; } = " wins the round!";
+    public string LifeLostText { get; private set; } = "You lost a life!";
+    public string GameEndText { get; private set; } = " wins the game!";
+    public string GameOverText { get; private set; } = "Game Over...";
 
     public Color blackColor { get; private set; } = new Color(0, 0, 0, 1);
     public Color redColor { get; private set; } = new Color(1, 0.5f, 0.5f, 1);
     public Color blueColor { get; private set; } = new Color(0.5f, 1, 1, 1);
-
 
     [Header("Camera")]
     private Camera MainCamera;
@@ -43,37 +61,39 @@ public class GameManager : MonoBehaviour
     public float racketYPosFromOrigin = -0.5f;
     public Player[] Players { get; private set; } = new Player[2];
     public BoxCollider2D[] PlayerGoals = new BoxCollider2D[2];
-    //public Color Player1Color = Color.cyan;
-    //public Color Player2Color = Color.red;
     public Color AIColor = Color.gray;
-    public PlayerWall[] PlayerWalls { get; private set; } = new PlayerWall[2];
     public Color HiHealthColor;
     public Color MedHealthColor;
     public Color LoHealthColor;
 
     [Header("Ball")]
     public Pongball Ball;
-    public float timeBeforeBallMove = 1f;
     public float baseBallSpeed = 5f;
     public float maxBallSpeed = 20f;
     public float reflectDampening { get; private set; } = 2.5f;
 
     [Header("Score")]
     public int scoreToWin = 3;
-    public float timeBeforeGameStart = 3;
+    public int currentRound { get; private set; } = 0;
+    public float RoundStartDelay = 1;
+    public float RoundEndDelay = 3;
+    //public float timeBeforeNextRound = 1f;
 
     [Header("Level")]
+    public GameMode gameMode;
     private BumperMove MiddleBumper;
+    public BoxCollider2D PlayZone { get; private set; }
 
     private void Start()
     {
         InitAttributes();
+        FaderScript.OutFade(fader);
         StartCoroutine(InitGameDelayer());
     }
 
     IEnumerator InitGameDelayer()
     {
-        yield return new WaitForSeconds(0.1f);
+        yield return new WaitForSeconds(.01f);
 
         InitGame();
     }
@@ -83,6 +103,13 @@ public class GameManager : MonoBehaviour
         deltaTime = Time.deltaTime;
 
         CameraShakeMovement();
+
+        PauseMenuInput();
+    }
+
+    private void PauseMenuInput()
+    {
+        if (Input.GetButtonDown(Pause)) PauseGame(GameState == GameState.Active ? true : false);
     }
 
     private void FixedUpdate()
@@ -107,6 +134,8 @@ public class GameManager : MonoBehaviour
 
     private void CameraShakeMovement()
     {
+        if (GameState == GameState.Paused) return;
+
         if (isCameraShaking)
         {
             MainCamera.transform.position = BasePosition +
@@ -119,12 +148,25 @@ public class GameManager : MonoBehaviour
             BasePosition, deltaTime * cameraReturnSpeed);
     }
 
+    public void LoadMainMenu()
+    {
+        PauseGame(false);
+        FaderScript.InFade(fader, "MainMenu");
+    }
+
+    public void SetScoreText(string textPass)
+    {
+        text.text = textPass;
+    }
+
+    public void SetRound(int roundPass)
+    {
+        currentRound = roundPass;
+    }
+
     public void InitGame()
     {
-        InitPlayers();
-        InitBall();
-
-        StartGame();
+        if (InitPlayers() && InitBall()) StartGame();
     }
 
     void InitAttributes()
@@ -132,11 +174,12 @@ public class GameManager : MonoBehaviour
         PlayZone = GetComponentInChildren<BoxCollider2D>();
         MainCamera = Camera.main;
 
-        PlayerWalls = FindObjectsOfType<PlayerWall>();
         MiddleBumper = FindAnyObjectByType<BumperMove>();
+        SetScoreText("");
+        PauseGame(false);
     }
 
-    void InitPlayers()
+    bool InitPlayers()
     {
         Player[] players = FindObjectsOfType<Player>();
 
@@ -148,11 +191,13 @@ public class GameManager : MonoBehaviour
                 else if (players[i].playerTeam == PlayerTeam.Player2) Players[1] = players[i];
             }
         }
+
+        return true;
     }
 
-    void InitBall()
-    {
-        Ball = FindObjectOfType<Pongball>();
+    bool InitBall()
+    {   
+        return Ball = FindObjectOfType<Pongball>();
     }
 
     public void ResetTrail(TrailRenderer trail)
@@ -165,52 +210,129 @@ public class GameManager : MonoBehaviour
 
     public IEnumerator TrailEnabler(TrailRenderer trail, float trailTime)
     {
-        yield return new WaitForSecondsRealtime(0.04f);
+        yield return new WaitForSeconds(0.04f);
 
         trail.time = trailTime;
     }
 
     public void StartGame()
     {
-        if (!Players[1].IsInit || !Players[0].IsInit || !Ball.IsInit) return;
-       
-        Ball.BallReset(Ball.RandomizeOwner());
+        SetScoreText("");
+
+        if (!Players[0].IsInit || !Ball.IsInit) return;
+
+        switch (gameMode)
+        {
+            case GameMode.Versus:
+                Ball.BallReset(Ball.RandomizeOwner());
+                Players[0].SetScore(0);
+                Players[1].SetScore(0);
+                break;
+            case GameMode.Solo:           
+                Ball.BallReset(Players[0].racket);
+                Players[0].SetScore(3);
+                break;
+            default:
+                break;
+        }
+
+        SetRound(0);
         InitRound();
-        Players[0].SetScore(0);
-        Players[1].SetScore(0);
     }
 
     public void InitRound()
     {
+        SetRound(currentRound + 1);
+
         Players[0].ResetPlayer();
-        Players[1].ResetPlayer();
-        MiddleBumper.ResetBumper();
+        if (Players[1] != null) Players[1].ResetPlayer();
+        if (MiddleBumper) MiddleBumper.ResetBumper();
+
+        switch (gameMode)
+        {
+            case GameMode.Solo:
+                SetScoreText("");
+                break;
+            case GameMode.Versus:
+                SetScoreText(RoundText + currentRound);
+                break;
+            default:
+                break;
+        }
+
+        StartCoroutine(InitRoundDelayer());
+    }
+
+        IEnumerator InitRoundDelayer()
+    {
+        yield return new WaitForSeconds(RoundStartDelay);
+
+        RoundState = RoundState.Play;
     }
 
     public void EndGame()
     {
-        Debug.Log("Game has ended. Restarting in " + timeBeforeGameStart + " seconds...");
+        RoundState = RoundState.Wait;
+
+        Debug.Log("Game has ended. Returning to menu in " + RoundEndDelay + " seconds...");
         StartCoroutine(EndGameTimer());
     }
 
     IEnumerator EndGameTimer()
     {
-        yield return new WaitForSeconds(timeBeforeGameStart);
+        yield return new WaitForSeconds(RoundEndDelay);
 
-        StartGame();
+        LoadMainMenu();
     }
+
     public IEnumerator RoundEnd(Player winner)
     {
-        yield return new WaitForSeconds(timeBeforeBallMove);
+        Player nextServicer = winner;
 
-        Player otherPlayer;
+        switch (gameMode)
+        {
+            case GameMode.Versus:
+                SetScoreText(PlayerPrefixText + (int)winner.playerTeam + RoundEndText);
+                if (winner != null) nextServicer = winner == Players[0] ? Players[1] : Players[0];
+                else nextServicer = Ball.RandomizeOwner().player;
+                break;
+            case GameMode.Solo:
+                if (Players[0].currentScore > 0) SetScoreText(LifeLostText);
+                nextServicer = Players[0];
+                break;
+            default:
+                break;
+        }
 
-        if (winner != null) otherPlayer = winner == Players[0] ? Players[1] : Players[0];
-        else otherPlayer = Ball.RandomizeOwner().player;
+        RoundState = RoundState.Wait;
 
-        Ball.BallReset(otherPlayer.racket);
+        yield return new WaitForSeconds(RoundEndDelay);
+
+        Ball.BallReset(nextServicer.racket);
         InitRound();
+    }
+
+    public void PauseGame(bool state)
+    {
+        string print = state == true ? "The game is now paused." : "Resuming game...";
+        Debug.Log(print);
+        Time.timeScale = state == true ? 0 : 1;
+        pauseMenu.SetActive(state);
+        GameState = state == true ? GameState.Paused : GameState.Active;
+
+    }
+
+    public void RestartLevel()
+    {
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+    }
+
+    public void ExitGame()
+    {
+        Application.Quit();
     }
 }
 
-//public enum GameState { }
+public enum RoundState { Wait, Play }
+public enum GameState { Active, Paused }
+public enum GameMode { Versus, Solo }

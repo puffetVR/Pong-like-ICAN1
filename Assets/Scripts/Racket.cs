@@ -28,9 +28,6 @@ public class Racket : Base
     private float colliderXOffset;
     public Color racketColor { get; private set; }
 
-    [Header("Vectors")]
-    private Vector2 moveVector;
-
     void Start()
     {
         InitAttributes();
@@ -57,26 +54,17 @@ public class Racket : Base
 
     public void ColorSetter(Color color)
     {
-        //Color color = Game.AIColor;
-
         if (player.controllerState == ControllerState.AI) color = Game.AIColor;
 
-        //switch (player.controllerState)
-        //{
-        //    case ControllerState.Player:
-        //        color = player.playerColor;
-        //        break;
-        //    case ControllerState.AI:
-        //        color = Game.AIColor;
-        //        break;
-        //}
+        Color colorTransparent = color;
+        colorTransparent.a = 0;
 
         color.a = 1;
 
         racketColor = color;
         racketSprite.color = color;
         racketTrail.startColor = color;
-        racketTrail.endColor = color;
+        racketTrail.endColor = colorTransparent;
     }
 
     public void IsControllableSet(bool state)
@@ -90,15 +78,20 @@ public class Racket : Base
 
         body.position = new Vector2(body.position.x, Mathf.Clamp(body.position.y, -Game.maxRacketHeight, Game.maxRacketHeight));
 
-        if (player.fire && canSmash) RacketSmash();
+        if (Game.RoundState == RoundState.Play)
+        {
+            if (player.fire || player.aiFire) RacketSmash();
+           
+            RacketMovement();
+        }
+
         RacketSmashUpdate();
-
-        if (isPlayerControlled) RacketMovement();
-
     }
 
     private void RacketSmash()
     {
+        if (!canSmash) return;
+
         Debug.Log("Poc");
         isSmashAlt = !isSmashAlt;
         targetAngle = isSmashAlt ? downAngle : upAngle;
@@ -119,17 +112,18 @@ public class Racket : Base
 
     private void RacketSmashUpdate()
     {
-        currentAngle = Mathf.MoveTowards(currentAngle, targetAngle, Game.racketSpeed / 3);
+        currentAngle = Mathf.MoveTowards(currentAngle, targetAngle, (Game.racketSpeed / 3) * (Game.deltaTime * 400f));
         Quaternion angle = Quaternion.Euler(new Vector3(0f, 0f, currentAngle));
         pivot.localRotation = angle;
 
-        currentOffset = Mathf.MoveTowards(currentOffset, targetOffset, Game.racketSpeed / 300);
+        currentOffset = Mathf.MoveTowards(currentOffset, targetOffset, (Game.racketSpeed / 300) * (Game.deltaTime * 400f));
         racketCollider.offset = new Vector2(colliderXOffset, currentOffset);
     }
 
     private void RacketMovement()
     {
-        float moveAmount = player.moveAxis;
+        float moveAmount = player.moveAmount;
+
         if (body.position.y >= Game.maxRacketHeight) moveAmount = Mathf.Clamp(moveAmount, -1f, 0f);
         if (body.position.y <= -Game.maxRacketHeight) moveAmount = Mathf.Clamp(moveAmount, 0f, 1f);
 
@@ -143,7 +137,11 @@ public class Racket : Base
     {
         body.velocity = Vector2.zero;
         racketCollider.enabled = false;
-        
+
+        isSmashAlt = false;
+        targetAngle = upAngle;
+        targetOffset = colliderYOffset;
+
         float posX = Game.racketXPosFromOrigin;
         float posY = Game.racketYPosFromOrigin;
         switch (player.playerTeam)

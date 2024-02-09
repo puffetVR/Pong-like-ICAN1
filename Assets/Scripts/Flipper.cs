@@ -6,6 +6,7 @@ public class Flipper : Base
 {
     public bool isPlayerControlled = false;
     public Player player { get; private set; }
+    public Rigidbody2D body;
 
     public Transform flipperPivot;
     public float restAngle = -15f, flippedAngle = 45f;
@@ -19,8 +20,7 @@ public class Flipper : Base
     private bool canFlip = true;
     private bool canUnflip = true;
 
-    // Start is called before the first frame update
-    void Start()
+    private void Start()
     {
         InitAttributes();
     }
@@ -39,41 +39,43 @@ public class Flipper : Base
     {
         if (player.controllerState == ControllerState.AI) color = Game.AIColor;
 
-        //Color color = Game.AIColor;
-
-        //switch (player.controllerState)
-        //{
-        //    case ControllerState.Player:
-        //        color = player.playerTeam == PlayerTeam.Player1 ? Game.Player1Color : Game.Player2Color;
-        //        break;
-        //    case ControllerState.AI:
-        //        color = Game.AIColor;
-        //        break;
-        //}
+        Color colorTransparent = color;
+        colorTransparent.a = 0;
 
         color.a = 1;
 
         flipperSprite.color = color;
         flipperTrail.startColor = color;
-        flipperTrail.endColor = color;
+        flipperTrail.endColor = colorTransparent;
     }
 
-    // Update is called once per frame
-    void Update()
+    private void Update()
     {
-        if (player.flipper && canFlip && !canUnflip && isPlayerControlled) Flip();
+        if (!IsInit) return;
+
+        if (Game.RoundState == RoundState.Play)
+        {
+            if (player.flipper && isPlayerControlled || player.aiFlipper) Flip();        
+        }
+
         FlipUpdate();
     }
 
-    void Flip()
+
+    private void Flip()
     {
-        Debug.Log("Flip!");
-        targetAngle = flippedAngle;
-        flipperPivot.tag = "Bumper";
-        if (gameObject.activeSelf) StartCoroutine(FlipDelay());
+
+        if (canFlip && !canUnflip)
+        {
+            Debug.Log("Flip!");
+            targetAngle = flippedAngle;
+            flipperPivot.tag = "Bumper";
+            if (gameObject.activeSelf) StartCoroutine(FlipDelay());
+        }
+
     }
 
-    IEnumerator FlipDelay()
+    private IEnumerator FlipDelay()
     {
         canFlip = false;
 
@@ -85,8 +87,8 @@ public class Flipper : Base
 
     private void FlipUpdate()
     {
-        currentAngle = Mathf.MoveTowards(currentAngle, targetAngle, 
-            targetAngle == restAngle ? .5f : 1.5f);
+        float t = targetAngle == restAngle ? .5f : 1.5f;
+        currentAngle = Mathf.MoveTowards(currentAngle, targetAngle, t * Game.deltaTime * 400f);
         Quaternion angle = Quaternion.Euler(new Vector3(0f, 0f, currentAngle));
         flipperPivot.localRotation = angle;
 
