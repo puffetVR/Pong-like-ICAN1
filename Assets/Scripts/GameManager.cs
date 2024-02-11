@@ -252,8 +252,8 @@ public class GameManager : MonoBehaviour
     // Pause Menu Button (Main Menu)
     public void LoadMainMenu()
     {
-        PauseGame(false);
-        FaderScript.InFade(fader, "MainMenu");
+        //PauseGame(false);
+        MainMenuLoader.MainMenuLoad();
     }
 
     // Pause Menu Button (Restart)
@@ -367,7 +367,7 @@ public class GameManager : MonoBehaviour
 
         string print = state == true ? "The game is now paused." : "Resuming game...";
         Debug.Log(print);
-        Time.timeScale = state == true ? 0 : 1;
+        SetTimeScale(state == true ? 0 : 1);
         pauseMenu.SetActive(state);
         GameState = state == true ? GameState.Paused : GameState.Active;
     }
@@ -377,6 +377,12 @@ public class GameManager : MonoBehaviour
     {
         Cursor.visible = state;
         //Cursor.lockState = state == true ? CursorLockMode.Locked : CursorLockMode.None;
+    }
+
+    // Sets Game Timescale
+    public static void SetTimeScale(int timescale)
+    {
+        Time.timeScale = timescale;
     }
 
     #endregion

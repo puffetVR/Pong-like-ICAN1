@@ -1,9 +1,14 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-public class LoadMainMenuOnStart : MonoBehaviour
+public class MainMenuLoader : MonoBehaviour
 {
     void Start()
+    {
+        MainMenuLoad();
+    }
+
+    public static void MainMenuLoad()
     {
         SceneManager.LoadScene(1);
     }
