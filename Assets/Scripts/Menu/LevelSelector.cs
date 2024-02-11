@@ -10,6 +10,7 @@ public class LevelSelector : MonoBehaviour
 
     public void Awake()
     {
+        GameManager.ToggleCursor(true);
         FaderScript = gameObject.AddComponent<Fader>();
         FaderScript.OutFade(fader);
     }

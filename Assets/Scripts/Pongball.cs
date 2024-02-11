@@ -9,6 +9,7 @@ public class Pongball : Base
 {
     [Header("Flags")]
     private bool LastHitBumper = false;
+    public bool IsInGoal = false;
     public bool IsMoving { get; private set; } = false;
 
     [Header("References")]
@@ -252,7 +253,7 @@ public class Pongball : Base
 
     private void OnTriggerExit2D(Collider2D trigger)
     {
-        if (trigger == null || trigger != Game.PlayZone) return;
+        if (trigger == null || trigger != Game.PlayZone || IsInGoal) return;
      
         BallExplode();
         if (gameObject.activeSelf) StartCoroutine(Game.RoundEnd(currentOwner.player));
@@ -269,6 +270,7 @@ public class Pongball : Base
     public void BallReset(Racket owner)
     {
         IsBallMoving(false);
+        IsInGoal = false;
 
         Game.ResetTrail(ballTrail);
         ballAnimator.SetTrigger("Reset");
@@ -297,6 +299,8 @@ public class Pongball : Base
 
     public void BallInGoal()
     {
+        IsInGoal = true;
+
         StopBall();
         Debug.Log("Goal!");
         Game.ShakeCamera(1f, .2f);
